@@ -1,0 +1,182 @@
+---
+title: "Economic and Health Impact of Weather Events Accross the USA from 1950 to 2011"
+---
+
+####Synopsis
+##### The purpose of this project is to analyze the health and economic impact of weather events accross the USA from 1950 to 2011 using the  U.S. National Oceanic and Atmospheric Administration's (NOAA) storm database.
+#####This database collects characteristics of major storms and weather events in the United States, as well as estimates of any fatalities, injuries, property and crop damage starting in the year 1950 and ending in November 2011.
+#####After cleaning the data and grouping by type of event, the total number of fatalities, injuries, property damages and crop damages for each category are shown in 2 separate panels. Overall, tornadoes cause the largest number of injuries and fatalities, while floods cause the most property damage, and drought causes the most damage to crops.
+
+####Data Processing
+#####The analysis was performed on
+[Storm Events Database](http://www.ncdc.noaa.gov/stormevents/ftp.jsp).
+The data is from a file available
+[here](https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2). There is also some documentation of the data available
+[here](https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2Fpd01016005curr.pdf).
+
+#####The first step is to download the file if it doesn't already exist in the working directory folder, and read the data.
+```{r}
+
+if (!file.exists("repdata_data_StormData.csv.bz2")) {
+  download.file("https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2", destfile="repdata_data_StormData.csv.bz2")
+}
+if (!exists('stormdata')) {
+  stormdata <- read.csv("repdata_data_StormData.csv.bz2")
+}
+str(stormdata)
+
+```
+
+##### The second step is to subset the  data according to the to columns of interest, which are EVTYPE, FATALITIES, INJURIES, PROPDMG, PROPDMGEXP, CROPDMG & CROPDMGEXP.
+
+```{r}
+my_vars <- c("EVTYPE", "FATALITIES", "INJURIES", "PROPDMG", "PROPDMGEXP", "CROPDMG", "CROPDMGEXP")
+newdata <- stormdata[my_vars]
+head(newdata)
+
+```
+
+#####In order to avoid duplicates, the following columns are converted to lower case:
+```{r}
+newdata$EVTYPE <- tolower(newdata$EVTYPE)
+newdata$PROPDMGEXP <- tolower(newdata$PROPDMGEXP)
+newdata$CROPDMGEXP <- tolower(newdata$CROPDMGEXP)
+
+```
+
+#####Let's load the needed packages.
+```{r, warning="FALSE"}
+library(dplyr)
+library(ggplot2)
+library(gridExtra)
+```
+
+####Analysis
+#####Question 1: Across the United States, which types of events (as indicated in the EVTYPE variable) are most harmful with respect to population health?
+#####I decided to calculate both the number of injuries and the number of fatalities for each type of event.
+
+```{r}
+#Let's calculate number of injuries per event type
+injuries<- aggregate(INJURIES ~ EVTYPE, newdata, sum, na.rm = TRUE)
+
+#Select the top 10 events with the most injuries
+top_injuries <- head(arrange(injuries, desc(INJURIES)), 10)
+top_injuries
+
+#Calculate number of fatalities per event type
+fatalities <- aggregate(FATALITIES ~ EVTYPE, newdata, sum, na.rm = TRUE)
+
+#Select the top 10 events with the most fatalities
+top_fatalities <- head(arrange(fatalities, desc(FATALITIES)), 10)
+top_fatalities
+
+```
+####Question 2: Across the United States, which types of events have the greatest economic consequences?
+#####I decided to calculate both the property damages and the crop damages for each type of event.
+#####According to the documentation, the PROPDMGEXP and CROPDMGEXP are used to signify the magnitude of PROPDMG and CROPDMG respectively, where K means 1000, M means one million, and B means one billion according to the documentation.  
+#####However there are extra values present as shown below.  The extra values will be disregarded. 
+
+```{r}
+unique(newdata$PROPDMGEXP)
+unique(newdata$CROPDMGEXP)
+
+```
+
+##### Now I can eliminate all the values that are Os and NAs for PROPDMG and CROPDMG, and the values that are incorrect for PROPDMGEXP and CROPDMGEXP.
+```{r}
+prop_data <- subset(newdata, newdata$PROPDMG > 0 & newdata$PROPDMGEXP %in% c("h", "k", "m", "b"), na.rm = TRUE)
+crop_data <- subset(newdata, newdata$CROPDMG > 0 & newdata$CROPDMGEXP %in% c("h", "k", "m", "b"), na.rm = TRUE)
+
+```
+
+#####Next, let's calculate the property damages & crop damages by multiplying PROPDMG and CROPDMG with the appropriate coeffecient.  
+```{r}
+
+#I created a loop that checks for h, k, m & b, and creates a new column propdamage and cropdamage.
+
+for (i in 1:nrow(prop_data)) {
+  if (prop_data$PROPDMGEXP[i] == "h")
+    prop_data$propdamage[i] = prop_data$PROPDMG[i] * 100
+  else if (prop_data$PROPDMGEXP[i] == "k")
+    prop_data$propdamage[i] = prop_data$PROPDMG[i] * 1000
+  else if (prop_data$PROPDMGEXP[i] == "m")
+    prop_data$propdamage[i] = prop_data$PROPDMG[i] * 1000000
+  else if (prop_data$PROPDMGEXP[i] == "b")
+  prop_data$propdamage[i] = prop_data$PROPDMG[i] * 1000000000
+  else prop_data$propdamage[i] = prop_data$PROPDMG[i]
+}
+head(prop_data)
+
+
+for (i in 1:nrow(crop_data)) {
+  if (crop_data$CROPDMGEXP[i] == "h")
+    crop_data$cropdamage[i] = crop_data$CROPDMG[i] * 100
+  else if (crop_data$CROPDMGEXP[i] == "k")
+    crop_data$cropdamage[i] = crop_data$CROPDMG[i] * 1000
+  else if (crop_data$CROPDMGEXP[i] == "m")
+    crop_data$cropdamage[i] = crop_data$CROPDMG[i] * 1000000
+  else if (crop_data$CROPDMGEXP[i] == "b")
+  crop_data$cropdamage[i] = crop_data$CROPDMG[i] * 1000000000
+  else crop_data$cropdamage[i] = crop_data$CROPDMG[i]
+}
+
+head(crop_data)
+
+#Calculate the property damages per event type
+properties <- aggregate(propdamage ~ EVTYPE, prop_data, sum, na.rm = TRUE)
+
+#Arrange by the top 10 events causing the most damage
+top_properties <- head(arrange(properties, desc(propdamage)), 10)
+top_properties
+
+#Calculate the crop damages per event type
+crop <- aggregate(cropdamage ~ EVTYPE, crop_data, sum, na.rm = TRUE)
+
+#Arrange by the top 10 events causing the most damage
+top_crop <- head(arrange(crop, desc(cropdamage)), 10)
+top_crop
+
+```
+####Results
+#####Let's plot the top 10 events with the most injuries and the most fatalities.
+```{r}
+
+plot1 <- ggplot(top_injuries, aes(x=reorder(EVTYPE, INJURIES), y=INJURIES, fill = INJURIES)) + 
+  geom_bar(stat = "identity") +
+  xlab("") +
+  ylab("Number of Injuries") +
+  theme(axis.text.x=element_text(angle=45, hjust=1)) +
+  theme(legend.position="none")
+
+plot2 <- ggplot(top_fatalities, aes(x=reorder(EVTYPE, FATALITIES), y=FATALITIES, fill=FATALITIES)) +
+  geom_bar(stat = "identity") +
+  xlab("Event type") +
+  ylab("Number of Fatalities") +
+  theme(axis.text.x=element_text(angle=45, hjust=1)) +
+  theme(legend.position="none")
+
+grid.arrange(plot1, plot2, top="Top 10 weather events with the most fatalities and injuries in the US from 1950 to 2011")
+```
+
+####Finally, let's plot the top 10 events with the most property and crop damages.
+```{r}
+plot3 <- ggplot(top_properties, aes(x=reorder(EVTYPE, propdamage), y=propdamage, fill=propdamage)) +
+  geom_bar(stat = "identity") +
+  xlab("") +
+  ylab("Property Damages") +
+  theme(axis.text.x=element_text(angle=45, hjust=1)) +
+  theme(legend.position="none")
+
+plot4 <- ggplot(top_crop, aes(x=reorder(EVTYPE, cropdamage), y=cropdamage, fill=cropdamage)) +
+  geom_bar(stat = "identity") +
+  xlab("Event type") +
+  ylab("Crop Damages") +
+  theme(axis.text.x=element_text(angle=45, hjust=1)) +
+  theme(legend.position="none")
+
+grid.arrange(plot3, plot4, top="Top 10 Weather Events with the most property and crop damages in the US from 1950 to 2011") 
+
+```
+
+####Conclusion
+#####As we can see from the graphs, tornadoes are responsible for the highest number of fatalities and injuries, while flood is reponsible for the most property damages, and drought is the cause of the most crop damages.
